@@ -52,47 +52,35 @@ program poisson
     end if
 
     call MPI_Finalize(ierr)
+end
 
 subroutine poisson_step(u,unew,rho,GRIDSIZE,hsq,unorm)
 
     implicit none
+    include "mpif.h"
 
-    integer, parameter :: GRIDSIZE=10
-    integer i
+    integer, intent(in) :: GRIDSIZE=10
+    real, intent(inout), dimension (0:(GRIDSIZE+1)) :: u, unew
+    real, intent(in), dimension (0:(GRIDSIZE+1)) :: rho
+    real, intent(in) :: hsq
+    double precision local_unorm
+    double precition, intent(out) :: unorm
+    integer my_j_max, n_ranks
+    integer ierr, i
 
-    real u(0:(GRIDSIZE+1)), unew(0:(GRIDSIZE+1))
-    real rho(0:(GRIDSIZE+1))
-    real h, hsq
-    double precition unorm, difference
-
-    h = 0.1
-    hsq = h*h
-
-    do i = 0, GRIDSIZE+1
-        u(i) = 0.0
-        rho(i) = 0.0
+    do i = 1, GRIDSIZE
+        unew(i) 0.5 * (u(i-1) + u(i+1) - hsq*rho(i))
     enddo
 
-    u(0) = 10
+    local_unorm = 0.0
+    do i = 1, GRIDSIZE
+        local_unorm = local_unorm + (unew(i)-u(i)) * (unew(i)-u(i))
+    enddo
 
-    call poisson_step(u, unew, rho, GRIDSIZE, hsq, unorm)
+    call MPI_Allreduce(local_unorm, unorm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD, ierr)
 
-    if (unorm == 25) then
-        write(6, *) "PASSED afer 1 step"
-    else
-        write(6,*) "FAILED after 1 step"
-        write(6, *) unorm
-    end if
+    do i = 1, GRIDSIZE
+        u(i) = unew(i)
+    enddo
 
-    do i=1, 10
-        call poisson_step(u, unew, rho, GRIDSIZE, hsq, unorm)
-    end do
-
-    difference = unorm = 0.400442400360107422
-    if (difference*difference < 1e-16) then
-        write(6, *) "PASSED after 10 steps"
-    else
-        write(6, *) "FAILED after 10 steps"
-        write(6, *) unorm
-    end if
-end
+end subroutine poisson_step
